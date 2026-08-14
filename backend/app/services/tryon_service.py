@@ -55,13 +55,20 @@ def create_job(db: Session, user: User, data: TryOnJobCreate) -> TryOnJob:
     )
 
 
-def process_job(job_id: uuid.UUID) -> None:
+def process_job(job_id: uuid.UUID, db: Session | None = None) -> None:
     """
     Runs as a FastAPI BackgroundTask, after the 202 response has already
-    been sent — so it needs its own DB session; the request's session is
-    long closed by the time this executes.
+    been sent — so by default it opens its own DB session, since the
+    request's session is long closed by the time this executes.
+
+    Tests pass their own `db` explicitly (the same session their test
+    transaction uses) — otherwise a real background task's independent
+    session couldn't see a job that only exists inside the test's
+    not-yet-committed transaction.
     """
-    db = SessionLocal()
+    owns_session = db is None
+    if db is None:
+        db = SessionLocal()
     try:
         job = tryon_repository.get_job(db, job_id)
         if job is None:
@@ -91,7 +98,8 @@ def process_job(job_id: uuid.UUID) -> None:
                 completed_at=datetime.now(timezone.utc),
             )
     finally:
-        db.close()
+        if owns_session:
+            db.close()
 
 
 def _to_read_model(job: TryOnJob) -> TryOnJobRead:

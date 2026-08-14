@@ -1,8 +1,10 @@
 import io
+import uuid
 
 from PIL import Image
 
 from app.models.user import User
+from app.services.tryon_service import process_job
 
 
 def _jpeg_bytes(width=400, height=600):
@@ -66,9 +68,16 @@ def test_full_tryon_pipeline(client, auth_headers, db_session):
     )
     assert job_response.status_code == 202
     job = job_response.json()
-    # TestClient runs BackgroundTasks synchronously, so by the time this
-    # response comes back the mock provider has already "generated" a
-    # result — no polling needed in the test.
+    assert job["status"] == "pending"
+
+    # The real BackgroundTask opens its own DB session (correct for
+    # production — it runs after the response is sent), which can't see
+    # this test's not-yet-committed transaction. Driving it explicitly
+    # with the test's own db_session simulates exactly what that
+    # background task does, inside a session that can see the job.
+    process_job(uuid.UUID(job["id"]), db=db_session)
+
+    job = client.get(f"/api/tryon/{job['id']}", headers=headers).json()
     assert job["status"] == "completed"
     assert job["result"]["provider"] == "mock"
 
