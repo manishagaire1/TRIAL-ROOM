@@ -25,3 +25,8 @@ export async function fetchCurrentUser(): Promise<User> {
   const { data } = await apiClient.get<User>('/users/me')
   return data
 }
+
+export async function guestSessionRequest(): Promise<string> {
+  const { data } = await apiClient.post<TokenResponse>('/auth/guest')
+  return data.access_token
+}

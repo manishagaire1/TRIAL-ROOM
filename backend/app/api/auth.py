@@ -31,3 +31,9 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
             detail="Incorrect email or password.",
         )
     return Token(access_token=auth_service.issue_token_for(user))
+
+
+@router.post("/guest", response_model=Token, status_code=status.HTTP_201_CREATED)
+def guest_session(db: Session = Depends(get_db)):
+    user = auth_service.create_guest_user(db)
+    return Token(access_token=auth_service.issue_token_for(user))

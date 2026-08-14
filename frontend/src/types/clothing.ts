@@ -1,10 +1,19 @@
-export interface ClothingItem {
+export interface ClothingListItem {
   id: string
   name: string
+  brand: string | null
   category: string
-  color: string
-  swatch: string // CSS color used as a stand-in until real product photos exist
+  primary_color: string
+  available_colors: string[]
   price: number
   currency: string
-  sizes: string[]
+  fit_type: string | null
+  available_sizes: string[]
+}
+
+export interface PaginatedClothing {
+  items: ClothingListItem[]
+  total: number
+  page: number
+  page_size: number
 }

@@ -1,56 +1,118 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { getClothes } from '../api/clothing'
+import { deletePhoto, getPhotoStatus, uploadPhoto } from '../api/photo'
+import { getSizeRecommendation } from '../api/sizeRecommendation'
+import { getStyleRecommendation } from '../api/styleRecommendation'
+import { createTryOnJob, getTryOnJob } from '../api/tryon'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { DisclaimerBanner } from '../components/ui/DisclaimerBanner'
-import { sampleClothing } from '../lib/sampleData'
-import type { ClothingItem } from '../types/clothing'
-
-type GenerateState = 'idle' | 'not-connected'
+import { useAuth } from '../hooks/useAuth'
+import { useAuthedImageUrl } from '../hooks/useAuthedImageUrl'
+import { getApiErrorMessage } from '../lib/apiError'
+import { getColorHex } from '../lib/colorSwatches'
+import type { ClothingListItem } from '../types/clothing'
 
 export function TrialRoomPage() {
+  const { user, ensureSession } = useAuth()
+  const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null)
-  const [selectedClothing, setSelectedClothing] = useState<ClothingItem | null>(null)
+
+  const [selectedClothing, setSelectedClothing] = useState<ClothingListItem | null>(
+    null,
+  )
   const [selectedSize, setSelectedSize] = useState<string | null>(null)
-  const [generateState, setGenerateState] = useState<GenerateState>('idle')
+  const [selectedColor, setSelectedColor] = useState<string | null>(null)
+  const [jobId, setJobId] = useState<string | null>(null)
+  const [jobError, setJobError] = useState<string | null>(null)
 
-  // Photo preview happens entirely in the browser (no upload yet — that
-  // needs the backend from Phase 4). Object URLs must be revoked when
-  // replaced or when the page unmounts, or the browser leaks memory.
-  useEffect(() => {
-    return () => {
-      if (photoUrl) URL.revokeObjectURL(photoUrl)
-    }
-  }, [photoUrl])
+  const catalogQuery = useQuery({ queryKey: ['clothes'], queryFn: getClothes })
 
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const photoStatusQuery = useQuery({
+    queryKey: ['photo-status'],
+    queryFn: getPhotoStatus,
+    enabled: Boolean(user),
+  })
+  const hasPhoto = photoStatusQuery.data?.has_photo ?? false
+  const { url: photoUrl } = useAuthedImageUrl(hasPhoto ? '/users/photo/file' : null)
+
+  const jobQuery = useQuery({
+    queryKey: ['tryon-job', jobId],
+    queryFn: () => getTryOnJob(jobId as string),
+    enabled: Boolean(jobId),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      return status === 'pending' || status === 'processing' ? 1500 : false
+    },
+  })
+  const job = jobQuery.data
+  const { url: resultUrl } = useAuthedImageUrl(
+    job?.status === 'completed' && job.result ? job.result.image_url : null,
+  )
+
+  const uploadMutation = useMutation({
+    mutationFn: uploadPhoto,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['photo-status'] }),
+  })
+  const deletePhotoMutation = useMutation({
+    mutationFn: deletePhoto,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['photo-status'] }),
+  })
+
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (photoUrl) URL.revokeObjectURL(photoUrl)
-    setPhotoUrl(URL.createObjectURL(file))
-    setGenerateState('idle')
+    await ensureSession()
+    uploadMutation.mutate(file)
   }
 
   const handleRemovePhoto = () => {
-    if (photoUrl) URL.revokeObjectURL(photoUrl)
-    setPhotoUrl(null)
-    setGenerateState('idle')
+    deletePhotoMutation.mutate()
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  const handleSelectClothing = (item: ClothingItem) => {
+  const handleSelectClothing = (item: ClothingListItem) => {
     setSelectedClothing(item)
     setSelectedSize(null)
-    setGenerateState('idle')
+    setSelectedColor(item.primary_color)
+    setJobId(null)
+    setJobError(null)
+    // Fire-and-forget: a size recommendation is a helpful assist, not a
+    // required step — if this fails, the user can still pick a size
+    // manually, so we don't block selection on it.
+    ensureSession().catch(() => {})
   }
 
-  const canGenerate = Boolean(photoUrl && selectedClothing && selectedSize)
+  const sizeRecommendationQuery = useQuery({
+    queryKey: ['size-recommendation', selectedClothing?.id],
+    queryFn: () => getSizeRecommendation({ clothing_id: selectedClothing!.id }),
+    enabled: Boolean(selectedClothing && user),
+  })
 
-  const handleGenerate = () => {
-    // There is no AI provider wired up yet (that's Phase 7). We show an
-    // honest "not connected" state instead of a fake generated image —
-    // faking an AI result here would violate the project's core promise.
-    setGenerateState('not-connected')
+  const styleRecommendationQuery = useQuery({
+    queryKey: ['style-recommendation', selectedClothing?.id],
+    queryFn: () => getStyleRecommendation({ clothing_id: selectedClothing!.id }),
+    enabled: Boolean(selectedClothing && user),
+  })
+
+  const canGenerate = Boolean(hasPhoto && selectedClothing && selectedSize && selectedColor)
+  const isGenerating = job?.status === 'pending' || job?.status === 'processing'
+
+  const handleGenerate = async () => {
+    if (!selectedClothing || !selectedSize || !selectedColor) return
+    setJobError(null)
+    try {
+      await ensureSession()
+      const newJob = await createTryOnJob({
+        clothing_id: selectedClothing.id,
+        selected_size: selectedSize,
+        selected_color: selectedColor,
+      })
+      setJobId(newJob.id)
+    } catch (err) {
+      setJobError(getApiErrorMessage(err))
+    }
   }
 
   return (
@@ -67,7 +129,7 @@ export function TrialRoomPage() {
             onChange={handlePhotoChange}
           />
 
-          {photoUrl ? (
+          {hasPhoto && photoUrl ? (
             <>
               <img
                 src={photoUrl}
@@ -79,10 +141,15 @@ export function TrialRoomPage() {
                   variant="secondary"
                   className="flex-1"
                   onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadMutation.isPending}
                 >
                   Replace
                 </Button>
-                <Button variant="secondary" onClick={handleRemovePhoto}>
+                <Button
+                  variant="secondary"
+                  onClick={handleRemovePhoto}
+                  disabled={deletePhotoMutation.isPending}
+                >
                   Delete
                 </Button>
               </div>
@@ -91,39 +158,60 @@ export function TrialRoomPage() {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
+              disabled={uploadMutation.isPending}
               className="flex aspect-3/4 w-full flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-neutral-300 text-center text-sm text-neutral-500 hover:border-neutral-400"
             >
-              <span>Upload a full-body photo</span>
+              <span>{uploadMutation.isPending ? 'Uploading...' : 'Upload a full-body photo'}</span>
               <span className="text-xs text-neutral-400">
                 Good lighting, clear background, no group photos
               </span>
             </button>
+          )}
+          {uploadMutation.isError && (
+            <p className="text-sm text-red-600">{getApiErrorMessage(uploadMutation.error)}</p>
           )}
         </Card>
 
         <Card title="Try-on result" className="flex flex-col gap-3">
           <DisclaimerBanner message="AI visualization is an approximation, not a guarantee of fit." />
           <div className="flex aspect-3/4 w-full items-center justify-center rounded-md bg-neutral-100 text-center text-sm text-neutral-500">
-            {generateState === 'not-connected' ? (
-              <p className="px-6">
-                The AI try-on provider isn't connected yet — this gets built
-                in Phase 7. This screen will show your generated result here.
+            {job?.status === 'completed' && resultUrl ? (
+              <img
+                src={resultUrl}
+                alt={`Try-on result: ${job.clothing_name}`}
+                className="h-full w-full rounded-md object-cover"
+              />
+            ) : isGenerating ? (
+              <p className="px-6">Preparing your virtual try-on...</p>
+            ) : job?.status === 'failed' ? (
+              <p className="px-6 text-red-600">
+                {job.failure_reason ?? 'The try-on could not be generated.'}
               </p>
             ) : (
               <p className="px-6">
-                Upload a photo, pick clothing and a size, then generate a
+                Upload a photo, pick clothing, a color, and a size, then generate a
                 try-on.
               </p>
             )}
           </div>
-          <Button disabled={!canGenerate} onClick={handleGenerate}>
-            Generate try-on
+          {jobError && <p className="text-sm text-red-600">{jobError}</p>}
+          <Button disabled={!canGenerate || isGenerating} onClick={handleGenerate}>
+            {isGenerating ? 'Generating...' : 'Generate try-on'}
           </Button>
         </Card>
 
         <Card title="Select clothing" className="flex flex-col gap-3">
+          {catalogQuery.isLoading && (
+            <p className="text-sm text-neutral-500">Loading catalog...</p>
+          )}
+          {catalogQuery.isError && (
+            <p className="text-sm text-red-600">
+              Couldn't load the catalog. Is the backend running?
+            </p>
+          )}
+
           <div className="flex flex-col gap-2">
-            {sampleClothing.map((item) => (
+            {catalogQuery.data?.items.map((item) => (
               <button
                 key={item.id}
                 type="button"
@@ -136,7 +224,7 @@ export function TrialRoomPage() {
               >
                 <span
                   className="h-10 w-10 shrink-0 rounded-md"
-                  style={{ backgroundColor: item.swatch }}
+                  style={{ backgroundColor: getColorHex(item.primary_color) }}
                   aria-hidden
                 />
                 <span className="flex-1">
@@ -144,7 +232,7 @@ export function TrialRoomPage() {
                     {item.name}
                   </span>
                   <span className="block text-xs text-neutral-500">
-                    {item.color} · ${item.price}
+                    {item.primary_color} · ${item.price}
                   </span>
                 </span>
               </button>
@@ -152,32 +240,126 @@ export function TrialRoomPage() {
           </div>
 
           {selectedClothing && (
-            <div>
-              <p className="mb-2 text-sm font-medium text-neutral-700">Size</p>
-              <div className="flex flex-wrap gap-2">
-                {selectedClothing.sizes.map((size) => (
+            <>
+              <div>
+                <p className="mb-2 text-sm font-medium text-neutral-700">Color</p>
+                <div className="flex flex-wrap gap-2">
+                  {selectedClothing.available_colors.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => setSelectedColor(color)}
+                      aria-pressed={selectedColor === color}
+                      title={color}
+                      className={`h-8 w-8 rounded-full border-2 ${
+                        selectedColor === color ? 'border-neutral-900' : 'border-transparent'
+                      }`}
+                      style={{ backgroundColor: getColorHex(color) }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {sizeRecommendationQuery.data?.recommended_size && (
+                <div className="rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm">
+                  <p className="font-medium text-neutral-900">
+                    Suggested size: {sizeRecommendationQuery.data.recommended_size}
+                    {sizeRecommendationQuery.data.estimated_fit &&
+                      ` (${sizeRecommendationQuery.data.estimated_fit} fit)`}
+                  </p>
+                  <p className="mt-1 text-neutral-600">
+                    {sizeRecommendationQuery.data.explanation}
+                  </p>
+                  <p className="mt-1 text-xs text-neutral-400">
+                    This is an estimate based on the information provided and the
+                    product's size chart. Actual fit may vary.
+                  </p>
                   <button
-                    key={size}
                     type="button"
-                    onClick={() => setSelectedSize(size)}
-                    className={`rounded-md border px-3 py-1 text-sm transition-colors ${
-                      selectedSize === size
-                        ? 'border-neutral-900 bg-neutral-900 text-white'
-                        : 'border-neutral-300 text-neutral-700 hover:border-neutral-400'
-                    }`}
+                    onClick={() =>
+                      setSelectedSize(sizeRecommendationQuery.data!.recommended_size)
+                    }
+                    className="mt-2 text-sm font-medium text-neutral-900 underline"
                   >
-                    {size}
+                    Use this size
+                  </button>
+                </div>
+              )}
+              {sizeRecommendationQuery.data && !sizeRecommendationQuery.data.recommended_size && (
+                <p className="text-sm text-neutral-500">
+                  {sizeRecommendationQuery.data.explanation}
+                </p>
+              )}
+
+              <div>
+                <p className="mb-2 text-sm font-medium text-neutral-700">Size</p>
+                <div className="flex flex-wrap gap-2">
+                  {selectedClothing.available_sizes.map((size) => (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => setSelectedSize(size)}
+                      className={`rounded-md border px-3 py-1 text-sm transition-colors ${
+                        selectedSize === size
+                          ? 'border-neutral-900 bg-neutral-900 text-white'
+                          : 'border-neutral-300 text-neutral-700 hover:border-neutral-400'
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </Card>
+      </div>
+
+      {selectedClothing && styleRecommendationQuery.data && (
+        <Card title="Complete the outfit">
+          {styleRecommendationQuery.data.suggestions.length === 0 ? (
+            <p className="text-sm text-neutral-500">
+              No strongly matching items were found in the catalog yet.
+            </p>
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {styleRecommendationQuery.data.suggestions.map((suggestion) => (
+                  <button
+                    key={suggestion.clothing_id}
+                    type="button"
+                    onClick={() => {
+                      const fullItem = catalogQuery.data?.items.find(
+                        (item) => item.id === suggestion.clothing_id,
+                      )
+                      if (fullItem) handleSelectClothing(fullItem)
+                    }}
+                    className="flex items-start gap-3 rounded-md border border-neutral-200 p-3 text-left hover:border-neutral-400"
+                  >
+                    <span
+                      className="h-10 w-10 shrink-0 rounded-md"
+                      style={{ backgroundColor: getColorHex(suggestion.primary_color) }}
+                      aria-hidden
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-neutral-900">
+                        {suggestion.name}
+                      </span>
+                      <span className="block text-xs uppercase tracking-wide text-neutral-400">
+                        {suggestion.slot}
+                      </span>
+                      <span className="mt-1 block text-xs text-neutral-500">
+                        {suggestion.reason}
+                      </span>
+                    </span>
                   </button>
                 ))}
               </div>
-            </div>
+              <p className="mt-3 text-xs text-neutral-400">{styleRecommendationQuery.data.note}</p>
+            </>
           )}
-
-          <p className="text-xs text-neutral-400">
-            Sample catalog shown — real products connect in Phase 6.
-          </p>
         </Card>
-      </div>
+      )}
     </div>
   )
 }

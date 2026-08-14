@@ -13,8 +13,10 @@ def get_by_id(db: Session, user_id: uuid.UUID) -> User | None:
     return db.query(User).filter(User.id == user_id).first()
 
 
-def create_user(db: Session, email: str, password_hash: str) -> User:
-    user = User(email=email, password_hash=password_hash)
+def create_user(
+    db: Session, email: str, password_hash: str, is_guest: bool = False
+) -> User:
+    user = User(email=email, password_hash=password_hash, is_guest=is_guest)
     db.add(user)
     db.commit()
     db.refresh(user)

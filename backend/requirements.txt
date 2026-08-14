@@ -8,3 +8,5 @@ pydantic-settings
 email-validator
 bcrypt
 pyjwt
+Pillow
+python-multipart

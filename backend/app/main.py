@@ -5,7 +5,16 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import auth, profile, users
+from app.api import (
+    auth,
+    clothes,
+    photo,
+    profile,
+    size_recommendation,
+    style_recommendation,
+    tryon,
+    users,
+)
 from app.core.config import settings
 
 logger = logging.getLogger("virtualfit")
@@ -76,6 +85,11 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 app.include_router(auth.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(profile.router, prefix="/api")
+app.include_router(clothes.router, prefix="/api")
+app.include_router(photo.router, prefix="/api")
+app.include_router(tryon.router, prefix="/api")
+app.include_router(size_recommendation.router, prefix="/api")
+app.include_router(style_recommendation.router, prefix="/api")
 
 
 @app.get("/api/health")

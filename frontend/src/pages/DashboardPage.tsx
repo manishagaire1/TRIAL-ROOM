@@ -1,10 +1,14 @@
 import { Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { getTryOnHistory } from '../api/tryon'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { sampleDashboardStats } from '../lib/sampleData'
 
 export function DashboardPage() {
   const stats = sampleDashboardStats
+  const historyQuery = useQuery({ queryKey: ['tryon-history'], queryFn: getTryOnHistory })
+  const recentTryOnsCount = historyQuery.data?.total ?? 0
 
   return (
     <div className="flex flex-col gap-6">
@@ -32,9 +36,9 @@ export function DashboardPage() {
         <Card title="Recent try-ons">
           <EmptyState
             text={
-              stats.recentTryOnsCount === 0
+              recentTryOnsCount === 0
                 ? "You haven't tried anything on yet."
-                : `${stats.recentTryOnsCount} recent try-ons`
+                : `${recentTryOnsCount} recent try-ons`
             }
           />
         </Card>
@@ -59,9 +63,9 @@ export function DashboardPage() {
       </div>
 
       <p className="text-xs text-neutral-400">
-        This dashboard shows placeholder/sample data. Real trial history and
-        saved outfits connect once the backend and AI try-on are built
-        (Phases 4 and 7).
+        Recent try-ons reflect your real trial history. Saved outfits and
+        shopping list are still placeholder data — those connect in a
+        later phase.
       </p>
     </div>
   )

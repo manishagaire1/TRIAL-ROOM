@@ -49,3 +49,15 @@ def get_current_user(
     if user is None:
         raise unauthorized
     return user
+
+
+def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Section 41: admin routes must never be reachable by normal users.
+    Stacks on top of get_current_user rather than duplicating the JWT
+    check — you must be a valid logged-in user AND an admin."""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This action requires admin access.",
+        )
+    return current_user

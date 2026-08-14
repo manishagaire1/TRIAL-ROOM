@@ -5,7 +5,12 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { fetchCurrentUser, loginRequest, registerRequest } from '../api/auth'
+import {
+  fetchCurrentUser,
+  guestSessionRequest,
+  loginRequest,
+  registerRequest,
+} from '../api/auth'
 import { getStoredToken, setStoredToken } from '../lib/apiClient'
 import type { User } from '../types/user'
 
@@ -15,6 +20,10 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>
   register: (email: string, password: string) => Promise<void>
   logout: () => void
+  /** Returns the current user, silently starting a guest session first
+   * if nobody is logged in yet. Lets Trial Room stay zero-friction
+   * (Section 24) while every action still has a real user to attach to. */
+  ensureSession: () => Promise<User>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -53,8 +62,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }
 
+  const ensureSession = async (): Promise<User> => {
+    if (user) return user
+    const token = await guestSessionRequest()
+    setStoredToken(token)
+    const guestUser = await fetchCurrentUser()
+    setUser(guestUser)
+    return guestUser
+  }
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
+    <AuthContext.Provider
+      value={{ user, isLoading, login, register, logout, ensureSession }}
+    >
       {children}
     </AuthContext.Provider>
   )
