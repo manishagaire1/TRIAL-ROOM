@@ -2,7 +2,15 @@ import type { ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 
-export function ProtectedRoute({ children }: { children: ReactNode }) {
+interface ProtectedRouteProps {
+  children: ReactNode
+  /** Section 24: history, saved outfits, and a persistent profile all
+   * require a real account — a guest session (created silently by
+   * Trial Room) isn't enough for these. */
+  requireRealAccount?: boolean
+}
+
+export function ProtectedRoute({ children, requireRealAccount = false }: ProtectedRouteProps) {
   const { user, isLoading } = useAuth()
 
   if (isLoading) {
@@ -10,6 +18,9 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   }
   if (!user) {
     return <Navigate to="/login" replace />
+  }
+  if (requireRealAccount && user.is_guest) {
+    return <Navigate to="/register" replace />
   }
   return <>{children}</>
 }

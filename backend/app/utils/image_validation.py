@@ -7,6 +7,7 @@ is never the client's raw, unexamined bytes.
 
 import io
 
+from fastapi import UploadFile
 from PIL import Image, ImageOps
 
 from app.core.exceptions import ImageValidationError
@@ -15,6 +16,31 @@ MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8 MB
 MIN_DIMENSION = 200
 MAX_DIMENSION = 6000
 ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP"}
+_READ_CHUNK_BYTES = 1024 * 1024  # 1 MB
+
+
+async def read_upload_with_limit(file: UploadFile, max_bytes: int = MAX_UPLOAD_BYTES) -> bytes:
+    """
+    Reads an upload in bounded chunks and aborts as soon as max_bytes is
+    exceeded, instead of `await file.read()` — which would buffer the
+    entire body (however large an attacker sends it) before any size
+    check ever runs. This is the actual enforcement point; the size
+    check inside validate_and_normalize_image is now a redundant
+    belt-and-suspenders check for callers that already have full bytes.
+    """
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(_READ_CHUNK_BYTES)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise ImageValidationError(
+                f"Image is too large. Maximum size is {max_bytes // (1024 * 1024)} MB."
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def validate_and_normalize_image(raw_bytes: bytes) -> bytes:

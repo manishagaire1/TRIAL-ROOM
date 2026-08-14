@@ -198,6 +198,13 @@ export function TrialRoomPage() {
           <Button disabled={!canGenerate || isGenerating} onClick={handleGenerate}>
             {isGenerating ? 'Generating...' : 'Generate try-on'}
           </Button>
+          {job?.status === 'completed' && (
+            <p className="text-xs text-neutral-400">
+              {user?.is_guest
+                ? 'Sign up to save this outfit and keep your trial history.'
+                : 'Head to Trial History to save this as an outfit.'}
+            </p>
+          )}
         </Card>
 
         <Card title="Select clothing" className="flex flex-col gap-3">

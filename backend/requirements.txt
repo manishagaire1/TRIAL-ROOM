@@ -10,3 +10,5 @@ bcrypt
 pyjwt
 Pillow
 python-multipart
+pytest
+httpx

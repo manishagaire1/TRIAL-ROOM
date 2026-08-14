@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -8,26 +9,36 @@ from fastapi.responses import JSONResponse
 from app.api import (
     auth,
     clothes,
+    outfits,
     photo,
     profile,
     size_recommendation,
     style_recommendation,
     tryon,
     users,
+    wardrobe,
 )
 from app.core.config import settings
+from app.core.rate_limit import RateLimitMiddleware
+from app.core.security_headers import SecurityHeadersMiddleware
 
 logger = logging.getLogger("virtualfit")
 
 app = FastAPI(title="VirtualFit AI API")
 
+# Middleware order matters: Starlette runs them in reverse of add order
+# (last added = outermost = runs first). Rate limiting first so an
+# over-limit request never reaches CORS/routing; headers last so they
+# still land on the 429 responses rate limiting produces.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_url],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RateLimitMiddleware)
 
 # Every error response uses the same { error: { code, message } } shape
 # (docs/05-api-design.md) so the frontend never has to special-case which
@@ -55,12 +66,16 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content={
             "error": {
                 "code": "VALIDATION_ERROR",
                 "message": "Some fields are invalid.",
-                "fields": exc.errors(),
+                # jsonable_encoder, not raw exc.errors() — a ValueError
+                # raised inside a @model_validator ends up embedded as a
+                # live exception object in the error's `ctx`, which the
+                # default JSON encoder can't serialize on its own.
+                "fields": jsonable_encoder(exc.errors()),
             }
         },
     )
@@ -90,6 +105,8 @@ app.include_router(photo.router, prefix="/api")
 app.include_router(tryon.router, prefix="/api")
 app.include_router(size_recommendation.router, prefix="/api")
 app.include_router(style_recommendation.router, prefix="/api")
+app.include_router(outfits.router, prefix="/api")
+app.include_router(wardrobe.router, prefix="/api")
 
 
 @app.get("/api/health")

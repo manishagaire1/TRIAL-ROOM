@@ -7,6 +7,7 @@ from app.core.exceptions import ImageValidationError
 from app.models.user import User
 from app.schemas.photo import UserPhotoRead
 from app.services import photo_service
+from app.utils.image_validation import read_upload_with_limit
 
 router = APIRouter(prefix="/users/photo", tags=["photo"])
 
@@ -25,8 +26,8 @@ async def upload_photo(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    raw_bytes = await file.read()
     try:
+        raw_bytes = await read_upload_with_limit(file)
         photo = photo_service.upload_photo(db, current_user, raw_bytes)
     except ImageValidationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=exc.message)

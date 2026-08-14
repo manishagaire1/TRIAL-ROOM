@@ -7,6 +7,9 @@ import { RegisterPage } from './pages/RegisterPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { TrialRoomPage } from './pages/TrialRoomPage'
+import { TrialHistoryPage } from './pages/TrialHistoryPage'
+import { SavedOutfitsPage } from './pages/SavedOutfitsPage'
+import { WardrobePage } from './pages/WardrobePage'
 import { NotFoundPage } from './pages/NotFoundPage'
 
 function App() {
@@ -19,7 +22,7 @@ function App() {
         <Route
           path="/dashboard"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requireRealAccount>
               <DashboardPage />
             </ProtectedRoute>
           }
@@ -27,8 +30,32 @@ function App() {
         <Route
           path="/profile"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requireRealAccount>
               <ProfilePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/history"
+          element={
+            <ProtectedRoute requireRealAccount>
+              <TrialHistoryPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/outfits"
+          element={
+            <ProtectedRoute requireRealAccount>
+              <SavedOutfitsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/wardrobe"
+          element={
+            <ProtectedRoute requireRealAccount>
+              <WardrobePage />
             </ProtectedRoute>
           }
         />

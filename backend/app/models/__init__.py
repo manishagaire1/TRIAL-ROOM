@@ -6,6 +6,8 @@ from app.models.size_chart import SizeChart, ClothingSize
 from app.models.clothing import Clothing, ClothingImage
 from app.models.user_photo import UserPhoto
 from app.models.tryon import TryOnJob, TryOnResult
+from app.models.wardrobe_item import WardrobeItem
+from app.models.outfit import SavedOutfit, OutfitItem
 
 __all__ = [
     "User",
@@ -19,4 +21,7 @@ __all__ = [
     "UserPhoto",
     "TryOnJob",
     "TryOnResult",
+    "WardrobeItem",
+    "SavedOutfit",
+    "OutfitItem",
 ]

@@ -10,6 +10,7 @@ import uuid
 
 from app.models.clothing import Clothing
 from app.models.style_preference import StylePreference
+from app.services.slot_mapping import CATEGORY_SLOT
 
 NOTE = (
     "These suggestions are based on general color-coordination "
@@ -31,23 +32,6 @@ _COMPLEMENTARY_PAIRS: dict[str, set[str]] = {
     "blue": {"beige", "brown"},
     "light blue": {"beige", "brown"},
     "indigo": {"olive", "red"},
-}
-
-_CATEGORY_SLOT = {
-    "T-shirt": "top",
-    "Shirt": "top",
-    "Hoodie": "top",
-    "Sweater": "top",
-    "Jacket": "outerwear",
-    "Coat": "outerwear",
-    "Dress": "dress",
-    "Jeans": "bottom",
-    "Pants": "bottom",
-    "Shorts": "bottom",
-    "Skirt": "bottom",
-    "Shoes": "shoes",
-    "Accessories": "accessory",
-    "Traditional clothing": "top",
 }
 
 _TARGET_SLOTS = {
@@ -79,7 +63,7 @@ def get_suggestions(
     occasion: str | None,
     style_preference: StylePreference | None,
 ) -> list[dict]:
-    anchor_slot = _CATEGORY_SLOT.get(anchor.category)
+    anchor_slot = CATEGORY_SLOT.get(anchor.category)
     if anchor_slot is None:
         return []
 
@@ -91,7 +75,7 @@ def get_suggestions(
     for item in catalog:
         if item.id == anchor.id:
             continue
-        slot = _CATEGORY_SLOT.get(item.category)
+        slot = CATEGORY_SLOT.get(item.category)
         if slot not in scored:
             continue
 

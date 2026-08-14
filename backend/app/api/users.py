@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
 from app.models.user import User
 from app.schemas.auth import UserRead
 from app.schemas.profile import UserProfileRead, UserProfileUpdate
-from app.services import profile_service
+from app.services import account_service, profile_service
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -13,6 +13,13 @@ router = APIRouter(prefix="/users", tags=["users"])
 @router.get("/me", response_model=UserRead)
 def read_current_user(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+def delete_current_user(
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    account_service.delete_account(db, current_user)
 
 
 @router.get("/profile", response_model=UserProfileRead)
