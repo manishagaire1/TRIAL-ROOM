@@ -1,4 +1,5 @@
 from app.ai.base import VirtualTryOnProvider
+from app.ai.gemini_provider import GeminiTryOnProvider
 from app.ai.mock_provider import MockTryOnProvider
 from app.core.config import settings
 
@@ -7,6 +8,7 @@ from app.core.config import settings
 # in tryon_service.py or app/api/tryon.py changes.
 _PROVIDERS: dict[str, type[VirtualTryOnProvider]] = {
     "mock": MockTryOnProvider,
+    "gemini": GeminiTryOnProvider,
 }
 
 
